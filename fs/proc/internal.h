@@ -297,6 +297,9 @@ extern const struct file_operations proc_pid_smaps_operations;
 extern const struct file_operations proc_tid_smaps_operations;
 extern const struct file_operations proc_clear_refs_operations;
 extern const struct file_operations proc_pagemap_operations;
+#ifdef CONFIG_TRACE_PAGE_ACCESS
+extern const struct file_operations proc_page_access_trace_operations;
+#endif
 
 extern unsigned long task_vsize(struct mm_struct *);
 extern unsigned long task_statm(struct mm_struct *,

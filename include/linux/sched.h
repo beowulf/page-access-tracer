@@ -3193,4 +3193,8 @@ static inline unsigned long rlimit_max(unsigned int limit)
 	return task_rlimit_max(current, limit);
 }
 
+#ifdef CONFIG_TRACE_PAGE_ACCESS
+extern void init_page_access_trace(struct task_struct *);
+#endif
+
 #endif

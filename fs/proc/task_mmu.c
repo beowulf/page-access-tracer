@@ -1657,3 +1657,155 @@ const struct file_operations proc_tid_numa_maps_operations = {
 	.release	= proc_map_release,
 };
 #endif /* CONFIG_NUMA */
+
+
+#ifdef CONFIG_TRACE_PAGE_ACCESS
+struct page_access_trace_struct {
+	struct delayed_work work;
+	int pid;
+	char comm[TASK_COMM_LEN];
+};
+
+static const int trace_interval_ms = 1;
+
+static int __trace_page_access(pte_t *pte, unsigned long addr, unsigned long next, struct mm_walk *walk)
+{
+	pte_t entry = *pte;
+	if (pte_none(entry) || !pte_present(entry)) return 0;
+
+	entry = pte_clear_flags(entry, _PAGE_PRESENT);
+	entry = pte_set_flags(entry, _PAGE_SOFTW2);
+	set_pte_at_notify(walk->mm, addr, pte, entry);
+	update_mmu_cache(walk->vma, addr, pte);
+
+	return 0;
+}
+
+static void __reset_page_access_trace(struct work_struct *work)
+{
+	struct page_access_trace_struct *pat =
+			container_of(to_delayed_work(work),
+			struct page_access_trace_struct, work);
+	struct task_struct *tsk;
+	struct mm_struct *mm;
+	struct mm_walk page_access_trace_walk = {
+		.pte_entry = __trace_page_access,
+		.private = NULL,
+	};
+
+	rcu_read_lock();
+	tsk = find_task_by_vpid(pat->pid);
+	if (!tsk) {
+		rcu_read_unlock();
+		goto out_free;
+	}
+	get_task_struct(tsk);
+	rcu_read_unlock();
+
+	mm = get_task_mm(tsk);
+	if (!mm) {
+		put_task_struct(tsk);
+		goto out_free;
+	}
+
+	page_access_trace_walk.mm = mm;
+
+	down_read(&mm->mmap_sem);
+	walk_page_range(0, ~0UL, &page_access_trace_walk);
+	up_read(&mm->mmap_sem);
+
+	mmput(mm);
+	put_task_struct(tsk);
+
+	schedule_delayed_work(to_delayed_work(work), HZ * trace_interval_ms / 1000);
+	return;
+
+out_free:
+	trace_printk("END %s\n", pat->comm);
+	kfree(pat);
+	return;
+}
+
+static void __start_page_access_trace(struct task_struct *tsk)
+{
+	struct page_access_trace_struct *pat = kmalloc(sizeof(*pat), GFP_KERNEL);
+
+	INIT_DELAYED_WORK(&pat->work, __reset_page_access_trace);
+	pat->pid = task_tgid_nr(tsk);
+	strncpy(pat->comm, tsk->comm, TASK_COMM_LEN);
+
+	trace_printk("START %s\n", tsk->comm);
+	schedule_work(&pat->work.work);
+}
+
+#define MAX_PAGE_ACCESS_TRACE_LIST	32
+static char *page_access_trace_list[MAX_PAGE_ACCESS_TRACE_LIST] = { NULL };
+
+void init_page_access_trace(struct task_struct *tsk)
+{
+	int i;
+	for (i = 0; i < MAX_PAGE_ACCESS_TRACE_LIST; i++) {
+		char *name = page_access_trace_list[i];
+		if (!name) break;
+
+		if (!strcmp(name, tsk->comm)) {
+			__start_page_access_trace(tsk);
+			break;
+		}
+	}
+	return;
+}
+
+static ssize_t list_page_access_trace(struct file *file, char __user *buf, size_t count, loff_t *pos)
+{
+	char *name;
+	if (!pos || *pos < 0 || *pos >= MAX_PAGE_ACCESS_TRACE_LIST) return 0;
+
+	name = page_access_trace_list[*pos];
+	if (!name) return 0;
+
+	if (strlen(name) >= count - 1) return -ENOMEM;
+	if (copy_to_user(buf, name, strlen(name))) return -EFAULT;
+	if (copy_to_user(buf + strlen(name), "\n", 1)) return -EFAULT;
+
+	*pos += 1;
+	return strlen(name) + 1;
+}
+
+static ssize_t enlist_page_access_trace(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+	int i;
+	char *name;
+	name = kzalloc(count + 1, GFP_KERNEL);
+	if (copy_from_user(name, buf, count)) {
+		return -EFAULT;
+	}
+	strreplace(name, '\r', '\0');
+	strreplace(name, '\n', '\0');
+
+	if (strlen(name) == 0) {
+		char *e;
+		for (i = 0; i < MAX_PAGE_ACCESS_TRACE_LIST; i++) {
+			e = page_access_trace_list[i];
+			if (e) kfree(e);
+			page_access_trace_list[i] = NULL;
+		}
+		kfree(name);
+		return count;
+	}
+
+	for (i = 0; i < MAX_PAGE_ACCESS_TRACE_LIST; i++) {
+		if (page_access_trace_list[i]) continue;
+
+		page_access_trace_list[i] = name;
+		return count;
+	}
+	return count;
+}
+
+const struct file_operations proc_page_access_trace_operations = {
+	.read		= list_page_access_trace,
+	.write		= enlist_page_access_trace,
+	.llseek		= noop_llseek,
+};
+#endif /* CONFIG_TRACE_PAGE_ACCESS */

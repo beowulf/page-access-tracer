@@ -3389,3 +3389,14 @@ static const struct file_operations proc_task_operations = {
 	.iterate	= proc_task_readdir,
 	.llseek		= default_llseek,
 };
+
+#ifdef CONFIG_TRACE_PAGE_ACCESS
+static int __init trace_page_access_init(void)
+{
+	proc_create("trace_page_access", S_IRUGO | S_IWUGO, NULL,
+			&proc_page_access_trace_operations);
+	return 0;
+}
+
+late_initcall(trace_page_access_init);
+#endif

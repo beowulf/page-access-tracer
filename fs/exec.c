@@ -1613,6 +1613,10 @@ static int do_execveat_common(int fd, struct filename *filename,
 	if (retval < 0)
 		goto out;
 
+#ifdef CONFIG_TRACE_PAGE_ACCESS
+	init_page_access_trace(current);
+#endif
+
 	/* execve succeeded */
 	current->fs->in_exec = 0;
 	current->in_execve = 0;

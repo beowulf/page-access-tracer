@@ -400,4 +400,8 @@ config PUNIT_ATOM_DEBUG
 	  The current power state can be read from
 	  /sys/kernel/debug/punit_atom/dev_power_state
 
+config TRACE_PAGE_ACCESS
+	bool "Trace page accesses"
+	default n
+
 endmenu

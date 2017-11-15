@@ -72,6 +72,11 @@
 
 #include "internal.h"
 
+#ifdef CONFIG_TRACE_PAGE_ACCESS
+#include <linux/delay.h>
+#include <linux/ptrace.h>
+#endif
+
 #ifdef LAST_CPUPID_NOT_IN_PAGE_FLAGS
 #warning Unfortunate NUMA and NUMA Balancing config, growing page-frame for last_cpupid.
 #endif
@@ -1133,6 +1138,16 @@ again:
 		if (pte_none(ptent)) {
 			continue;
 		}
+
+#ifdef CONFIG_TRACE_PAGE_ACCESS
+		if (pte_flags(ptent) & _PAGE_SOFTW2) {
+			ptent = pte_set_flags(ptent, _PAGE_PRESENT);
+			ptent = pte_clear_flags(ptent, _PAGE_SOFTW2);
+			if (ptep_set_access_flags(vma, addr, pte, ptent, 0)) {
+				update_mmu_cache(vma, addr, pte);
+			}
+		}
+#endif
 
 		if (pte_present(ptent)) {
 			struct page *page;
@@ -3327,6 +3342,18 @@ static int handle_pte_fault(struct mm_struct *mm,
 	entry = *pte;
 	barrier();
 	if (!pte_present(entry)) {
+#ifdef CONFIG_TRACE_PAGE_ACCESS
+		if (pte_flags(entry) & _PAGE_SOFTW2) {
+			trace_printk("%d %c %lx %lx\n", current->pid,
+					flags & FAULT_FLAG_WRITE ? 'W' : 'R',
+					instruction_pointer(current_pt_regs()), address);
+			entry = pte_set_flags(entry, _PAGE_PRESENT);
+			entry = pte_clear_flags(entry, _PAGE_SOFTW2);
+			set_pte_at_notify(mm, address, pte, entry);
+			update_mmu_cache(vma, address, pte);
+			return 0;
+		}
+#endif
 		if (pte_none(entry)) {
 			if (vma_is_anonymous(vma))
 				return do_anonymous_page(mm, vma, address,
