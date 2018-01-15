@@ -1816,6 +1816,9 @@ struct task_struct {
 	unsigned long	task_state_change;
 #endif
 	int pagefault_disabled;
+#ifdef CONFIG_TRACE_PAGE_ACCESS
+	unsigned long trace_aux;
+#endif
 /* CPU-specific state of this task */
 	struct thread_struct thread;
 /*

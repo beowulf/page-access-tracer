@@ -197,4 +197,8 @@ struct prctl_mm_map {
 # define PR_CAP_AMBIENT_LOWER		3
 # define PR_CAP_AMBIENT_CLEAR_ALL	4
 
+#ifdef CONFIG_TRACE_PAGE_ACCESS
+#define PR_SET_PAGE_ACCESS_TRACE_AUX	48
+#endif
+
 #endif /* _LINUX_PRCTL_H */

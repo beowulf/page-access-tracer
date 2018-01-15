@@ -3344,9 +3344,10 @@ static int handle_pte_fault(struct mm_struct *mm,
 	if (!pte_present(entry)) {
 #ifdef CONFIG_TRACE_PAGE_ACCESS
 		if (pte_flags(entry) & _PAGE_SOFTW2) {
-			trace_printk("%d %c %lx %lx\n", current->pid,
+			trace_printk("%d %c %lx %lx %lu\n", current->pid,
 					flags & FAULT_FLAG_WRITE ? 'W' : 'R',
-					instruction_pointer(current_pt_regs()), address);
+					instruction_pointer(current_pt_regs()), address,
+					current->trace_aux);
 			entry = pte_set_flags(entry, _PAGE_PRESENT);
 			entry = pte_clear_flags(entry, _PAGE_SOFTW2);
 			set_pte_at_notify(mm, address, pte, entry);
